@@ -18,8 +18,8 @@ T MessageQueue<T>::receive()
     // this pointer here captures the current object by reference
     _cv.wait(lock, [this](){ return !_queue.empty();});
     
-    auto msg = std::move(_queue.front());
-    _queue.pop_front();
+    auto msg = std::move(_queue.back());
+    _queue.clear(); // Clear the queue as we are only interested on the latest   message.
 
     return msg;
 }
@@ -30,7 +30,7 @@ void MessageQueue<T>::send(T &&msg)
     // FP.4a : The method send should use the mechanisms std::lock_guard<std::mutex> 
     // as well as _condition.notify_one() to add a new message to the queue and afterwards send a notification.
 
-    std::unique_lock<std::mutex> lock(_mtx);
+    std::lock_guard<std::mutex> lock(_mtx);
     _queue.emplace_back(msg);
     _cv.notify_one();
 }
@@ -63,6 +63,7 @@ void TrafficLight::waitForGreen()
 
 TrafficLightPhase TrafficLight::getCurrentPhase()
 {
+    std::unique_lock<std::mutex> lock(_mutex);
     return _currentPhase;
 }
 
@@ -111,7 +112,9 @@ void TrafficLight::cycleThroughPhases()
             setCycleDuration();
 
             auto newPhase = (_currentPhase == TrafficLightPhase::red) ? TrafficLightPhase::green : TrafficLightPhase::red;
+            std::unique_lock<std::mutex> lock(_mutex);
             _currentPhase = newPhase;
+            lock.unlock();
             _messageQueue.send(std::move(newPhase));
         }
     }
